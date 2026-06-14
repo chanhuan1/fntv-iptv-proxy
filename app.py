@@ -75,7 +75,7 @@ def _start_ffmpeg(slug: str, rtsp_url: str):
         "-i", rtsp_url,
         "-c:v", "libx264",
         "-preset", "ultrafast",
-        "-crf", "28",
+        "-crf", "20",
         "-threads", "1",
         "-c:a", "aac",
         "-b:a", "64k",
