@@ -1,14 +1,20 @@
 import json
+import logging
 import os
 import re
 import signal
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
 
 from flask import Flask, Response, abort
 from waitress import serve
+
+logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+                    format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
+log = logging.getLogger("iptv")
 
 app = Flask(__name__)
 
@@ -102,6 +108,7 @@ def _touch(slug: str):
             while len(_procs) >= MAX_CONCURRENT:
                 oldest = min((s for s in _last_access if s in _procs), key=lambda s: _last_access[s])
                 _kill_proc(oldest)
+            log.info("Starting ffmpeg for %s", slug)
             _procs[slug] = _start_ffmpeg(slug, RTSP_DB[slug]["url"])
 
 
@@ -118,6 +125,7 @@ def _kill_proc(slug: str):
     _last_access.pop(slug, None)
     if p is None:
         return
+    log.info("Stopping ffmpeg for %s", slug)
     try:
         os.killpg(p.pid, signal.SIGKILL)
     except OSError:
@@ -194,4 +202,8 @@ def _cleanup_loop():
 threading.Thread(target=_cleanup_loop, daemon=True).start()
 
 if __name__ == "__main__":
+    log.info("Starting IPTV Proxy — %d channels in DB, %d active in M3U",
+             len(RTSP_DB), len(_get_active_slugs()))
+    log.info("Listening on http://0.0.0.0:18888")
+    log.info("M3U: http://NAS_IP:18888/iptv.m3u")
     serve(app, host="0.0.0.0", port=18888)
