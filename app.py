@@ -8,7 +8,7 @@ import threading
 import time
 from pathlib import Path
 
-from flask import Flask, Response, abort
+from flask import Flask, Response, abort, request
 from waitress import serve
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
@@ -175,7 +175,7 @@ def _wait_playlist(slug: str) -> bytes:
     return EMPTY
 
 
-def _generate_proxy_m3u() -> str:
+def _generate_proxy_m3u(base_url: str) -> str:
     """Generate a proxy-format M3U from the parsed channels."""
     lines = ['#EXTM3U x-tvg-url="http://epg.51zmt.top:800/e.xml"']
     for ch in _channels:
@@ -189,7 +189,7 @@ def _generate_proxy_m3u() -> str:
         parts.append(f'group-title="{group}"')
         parts.append(f',{ch["name"]}')
         lines.append(" ".join(parts))
-        lines.append(f"http://NAS_IP:18888/{ch['slug']}/index.m3u8")
+        lines.append(f"{base_url}/{ch['slug']}/index.m3u8")
         lines.append("")
     return "\n".join(lines)
 
@@ -220,7 +220,10 @@ def serve_file(slug: str, filename: str):
 @app.route("/iptv.m3u")
 def serve_m3u():
     _reload_if_changed()
-    return Response(_generate_proxy_m3u(), mimetype="audio/x-mpegurl")
+    scheme = request.headers.get("X-Forwarded-Proto", request.scheme)
+    host = request.headers.get("X-Forwarded-Host", request.host)
+    base_url = f"{scheme}://{host}"
+    return Response(_generate_proxy_m3u(base_url), mimetype="audio/x-mpegurl")
 
 
 @app.route("/health")
