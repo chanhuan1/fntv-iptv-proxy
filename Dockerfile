@@ -1,7 +1,7 @@
 FROM alpine:3.21
 
 RUN apk add --no-cache python3 py3-pip ffmpeg x264-libs && \
-    pip install flask --break-system-packages
+    pip install flask waitress --break-system-packages
 
 WORKDIR /app
 COPY app.py .

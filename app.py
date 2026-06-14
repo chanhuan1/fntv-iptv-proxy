@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 from flask import Flask, Response, abort
+from waitress import serve
 
 app = Flask(__name__)
 
@@ -70,6 +71,8 @@ def _start_ffmpeg(slug: str, rtsp_url: str):
         "-loglevel", "error",
         "-rtsp_transport", "tcp",
         "-rtsp_flags", "prefer_tcp",
+        "-timeout", "5000000",
+        "-stimeout", "3000000",
         "-analyzeduration", "500K",
         "-probesize", "500K",
         "-i", rtsp_url,
@@ -98,7 +101,7 @@ def _touch(slug: str):
             if slug in _procs:
                 _procs.pop(slug)
             while len(_procs) >= MAX_CONCURRENT:
-                oldest = min(_last_access, key=lambda s: _last_access.get(s, 0))
+                oldest = min((s for s in _last_access if s in _procs), key=lambda s: _last_access[s])
                 _kill_proc(oldest)
             _procs[slug] = _start_ffmpeg(slug, RTSP_DB[slug]["url"])
 
@@ -128,11 +131,17 @@ def _kill_proc(slug: str):
 
 def _wait_playlist(slug: str) -> bytes:
     playlist = HLS_DIR / slug / "index.m3u8"
-    for _ in range(75):
+    for i in range(50):  # 10s max
         if playlist.exists():
             content = playlist.read_bytes()
             if b"#EXTINF:" in content:
                 return content
+        # If ffmpeg died, source is dead — stop waiting
+        if i > 0 and i % 5 == 0:
+            with _lock:
+                p = _procs.get(slug)
+            if p and p.poll() is not None:
+                return EMPTY
         time.sleep(0.2)
     if playlist.exists():
         return playlist.read_bytes()
@@ -178,4 +187,4 @@ def _cleanup_loop():
 threading.Thread(target=_cleanup_loop, daemon=True).start()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=18888, debug=False)
+    serve(app, host="0.0.0.0", port=18888)
